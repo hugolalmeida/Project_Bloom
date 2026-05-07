@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fff8e8;
+  --foreground: #254033;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+@keyframes bloom-pop {
+  0% {
+    transform: scale(0.96);
+  }
+  45% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-bloom-pop {
+  animation: bloom-pop 850ms ease both;
+}
+
+@keyframes plant-evolve {
+  0% {
+    filter: brightness(1);
+    transform: scale(0.9) rotate(-2deg);
+  }
+  35% {
+    filter: brightness(1.22);
+    transform: scale(1.15) rotate(2deg);
+  }
+  70% {
+    filter: brightness(1.08);
+    transform: scale(0.98) rotate(-1deg);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-plant-evolve {
+  animation: plant-evolve 1200ms ease both;
+}
+
+@keyframes task-complete {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.025);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-task-complete {
+  animation: task-complete 520ms ease both;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-progress-shimmer {
+  animation: progress-shimmer 900ms ease infinite;
+}
+
+@keyframes confetti-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(78px) rotate(120deg);
+  }
+}
