@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fff8e8;
-  --foreground: #254033;
+  --background: #eaf1ff;
+  --foreground: #102b55;
 }
 
 @theme inline {
@@ -22,7 +22,7 @@ input {
   font: inherit;
 }
 
-@keyframes bloom-pop {
+@keyframes character-pop {
   0% {
     transform: scale(0.96);
   }
@@ -34,11 +34,11 @@ input {
   }
 }
 
-.animate-bloom-pop {
-  animation: bloom-pop 850ms ease both;
+.animate-character-pop {
+  animation: character-pop 850ms ease both;
 }
 
-@keyframes plant-evolve {
+@keyframes character-evolve {
   0% {
     filter: brightness(1);
     transform: scale(0.9) rotate(-2deg);
@@ -57,8 +57,8 @@ input {
   }
 }
 
-.animate-plant-evolve {
-  animation: plant-evolve 1200ms ease both;
+.animate-character-evolve {
+  animation: character-evolve 1200ms ease both;
 }
 
 @keyframes task-complete {
@@ -75,6 +75,25 @@ input {
 
 .animate-task-complete {
   animation: task-complete 520ms ease both;
+}
+
+@keyframes xp-float {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-xp-float {
+  animation: xp-float 520ms ease both;
 }
 
 @keyframes progress-shimmer {
@@ -102,4 +121,39 @@ input {
     opacity: 0;
     transform: translateY(78px) rotate(120deg);
   }
+}
+
+@keyframes adventure-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-adventure-pop {
+  animation: adventure-pop 720ms ease both;
+}
+
+@keyframes adventure-spark {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.35);
+  }
+}
+
+.animate-adventure-spark {
+  animation: adventure-spark 1200ms ease-in-out infinite;
 }

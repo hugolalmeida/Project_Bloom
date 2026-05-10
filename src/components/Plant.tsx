@@ -13,7 +13,7 @@ export function Plant({ evolutionActive, level, plantName }: PlantProps) {
       <div className="absolute bottom-0 left-0 right-0 h-20 rounded-t-[50%] bg-[#b9dfa7]" />
       <div
         className={`relative mx-auto flex h-40 w-40 items-center justify-center text-8xl sm:h-44 sm:w-44 ${
-          evolutionActive ? "animate-plant-evolve" : "animate-bloom-pop"
+          evolutionActive ? "animate-character-evolve" : "animate-character-pop"
         }`}
         aria-label={`Planta ${plantName} no level ${level}`}
       >

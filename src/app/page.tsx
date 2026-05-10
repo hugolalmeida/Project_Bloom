@@ -1,5 +1,5 @@
-import { BloomApp } from "@/components/BloomApp";
+import { TeancumApp } from "@/components/TeancumApp";
 
 export default function Home() {
-  return <BloomApp />;
+  return <TeancumApp />;
 }

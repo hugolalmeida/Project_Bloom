@@ -1,0 +1,409 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  LONG_PROJECT_MIN_DAYS,
+  MAX_PROJECT_DAYS,
+  PROJECT_AREA_LABELS,
+  PROJECT_DURATION_LABELS,
+  PROJECT_TASK_LIBRARY,
+  CUSTOM_PROJECT_TASK_XP,
+  MAX_ACTIVE_PROJECTS,
+  MAX_PROJECT_TASKS,
+  MIN_PROJECT_DAYS,
+  PRESET_PROJECT_TASK_XP,
+  clampProjectDays,
+  getProjectDurationFromDays,
+  getProjectRewardFromDays,
+  getTodayKey,
+} from "@/lib/game";
+import type {
+  CreateProjectData,
+  PersonalProject,
+  ProjectArea,
+  ProjectTaskSource,
+} from "@/types/teancum";
+
+type ProjectsPanelProps = {
+  pendingProjectTaskId: string | null;
+  projectSaving: boolean;
+  projects: PersonalProject[];
+  onCompleteProjectTask: (projectId: string, taskId: string) => Promise<void>;
+  onCreateProject: (data: CreateProjectData) => Promise<void>;
+};
+
+const projectAreas = Object.keys(PROJECT_AREA_LABELS) as ProjectArea[];
+
+type SelectedProjectTask = {
+  label: string;
+  source: ProjectTaskSource;
+};
+
+export function ProjectsPanel({
+  pendingProjectTaskId,
+  projectSaving,
+  projects,
+  onCompleteProjectTask,
+  onCreateProject,
+}: ProjectsPanelProps) {
+  const [title, setTitle] = useState("");
+  const [area, setArea] = useState<ProjectArea>("spiritual");
+  const [targetDays, setTargetDays] = useState(MIN_PROJECT_DAYS);
+  const [selectedTasks, setSelectedTasks] = useState<SelectedProjectTask[]>([]);
+  const [customTaskLabel, setCustomTaskLabel] = useState("");
+
+  const suggestedTasks = PROJECT_TASK_LIBRARY[area];
+  const duration = getProjectDurationFromDays(targetDays);
+  const reward = getProjectRewardFromDays(targetDays);
+  const activeProjects = projects.filter((project) => !project.completed);
+  const completedProjects = projects.filter((project) => project.completed);
+  const reachedActiveLimit = activeProjects.length >= MAX_ACTIVE_PROJECTS;
+
+  const canCreate = selectedTasks.length > 0 && !projectSaving && !reachedActiveLimit;
+  const customTaskText = customTaskLabel.trim();
+  const canAddCustomTask =
+    customTaskText.length >= 3 &&
+    selectedTasks.length < MAX_PROJECT_TASKS &&
+    !hasSelectedTask(customTaskText);
+
+  const defaultTitle = useMemo(() => {
+    return `Projeto ${PROJECT_AREA_LABELS[area].toLowerCase()}`;
+  }, [area]);
+
+  function hasSelectedTask(label: string) {
+    const normalizedLabel = label.trim().toLowerCase();
+    return selectedTasks.some((task) => task.label.trim().toLowerCase() === normalizedLabel);
+  }
+
+  function togglePresetTask(label: string) {
+    setSelectedTasks((currentTasks) => {
+      if (currentTasks.some((task) => task.label === label)) {
+        return currentTasks.filter((task) => task.label !== label);
+      }
+
+      if (currentTasks.length >= MAX_PROJECT_TASKS) {
+        return currentTasks;
+      }
+
+      return [...currentTasks, { label, source: "preset" }];
+    });
+  }
+
+  function addCustomTask() {
+    const label = customTaskLabel.trim();
+    if (!label || selectedTasks.length >= MAX_PROJECT_TASKS || hasSelectedTask(label)) return;
+
+    setSelectedTasks((currentTasks) => [...currentTasks, { label, source: "custom" }]);
+    setCustomTaskLabel("");
+  }
+
+  function removeTask(label: string) {
+    setSelectedTasks((currentTasks) => currentTasks.filter((task) => task.label !== label));
+  }
+
+  async function handleCreateProject() {
+    if (!canCreate) return;
+
+    await onCreateProject({
+      title: title.trim() || defaultTitle,
+      area,
+      targetDays: clampProjectDays(targetDays),
+      tasks: selectedTasks,
+    });
+
+    setTitle("");
+    setSelectedTasks([]);
+    setCustomTaskLabel("");
+  }
+
+  return (
+    <section className="rounded-[28px] bg-white p-4 shadow-[0_14px_32px_rgba(17,49,96,0.12)]">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-[#1f5fbf]">
+            Projetos
+          </p>
+          <h2 className="text-lg font-black text-[#102b55]">Projetos pessoais</h2>
+          <p className="mt-1 text-xs font-bold text-[#66799e]">
+            {activeProjects.length}/{MAX_ACTIVE_PROJECTS} projetos ativos
+          </p>
+        </div>
+        <span className="rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
+          Bonus +{reward} XP
+        </span>
+      </div>
+
+      <div className="rounded-[24px] border border-[#d7e3fb] bg-[#f8fbff] p-3">
+        {reachedActiveLimit ? (
+          <p className="mb-3 rounded-2xl bg-[#fff2b8] px-3 py-2 text-xs font-black text-[#7a6418]">
+            Limite atingido. Conclua um projeto ativo antes de criar outro.
+          </p>
+        ) : null}
+
+        <input
+          className="mb-3 h-12 w-full rounded-2xl border-2 border-[#dbe6fb] bg-white px-4 text-sm font-bold text-[#102b55] outline-none transition focus:border-[#1f5fbf]"
+          maxLength={36}
+          placeholder={defaultTitle}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div>
+            <p className="mb-1 text-xs font-black text-[#66799e]">Area</p>
+            <select
+              className="h-11 w-full rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-black text-[#102b55] outline-none"
+              value={area}
+              onChange={(event) => {
+                setArea(event.target.value as ProjectArea);
+                setSelectedTasks([]);
+                setCustomTaskLabel("");
+              }}
+            >
+              {projectAreas.map((projectArea) => (
+                <option key={projectArea} value={projectArea}>
+                  {PROJECT_AREA_LABELS[projectArea]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-black text-[#66799e]">Dias</p>
+            <input
+              className="h-11 w-full rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-black text-[#102b55] outline-none"
+              max={MAX_PROJECT_DAYS}
+              min={MIN_PROJECT_DAYS}
+              type="number"
+              value={targetDays}
+              onBlur={() => setTargetDays((days) => clampProjectDays(days))}
+              onChange={(event) => setTargetDays(Number(event.target.value))}
+            />
+          </div>
+        </div>
+
+        <p className="mb-3 rounded-2xl bg-[#eaf1ff] px-3 py-2 text-xs font-black text-[#1f5fbf]">
+          {clampProjectDays(targetDays)} dias · {PROJECT_DURATION_LABELS[duration]} (
+          {LONG_PROJECT_MIN_DAYS}+ dias vira longo)
+        </p>
+
+        <p className="mb-2 text-xs font-black text-[#66799e]">
+          Escolha 1 a {MAX_PROJECT_TASKS} tarefas ({selectedTasks.length}/{MAX_PROJECT_TASKS})
+        </p>
+        <div className="mb-3 space-y-2">
+          {suggestedTasks.map((task) => {
+            const selected = selectedTasks.some((selectedTask) => selectedTask.label === task);
+
+            return (
+              <button
+                className={`flex min-h-11 w-full items-center gap-2 rounded-2xl border-2 px-3 text-left text-sm font-black transition ${
+                  selected
+                    ? "border-[#1f5fbf] bg-[#eaf1ff] text-[#102b55]"
+                    : "border-[#dbe6fb] bg-white text-[#4b638f]"
+                }`}
+                key={task}
+                onClick={() => togglePresetTask(task)}
+                type="button"
+              >
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs ${
+                    selected ? "bg-[#1f5fbf] text-white" : "bg-[#eaf1ff] text-[#1f5fbf]"
+                  }`}
+                >
+                  {selected ? "✓" : "+"}
+                </span>
+                <span className="min-w-0 flex-1">{task}</span>
+                <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-[#1f5fbf]">
+                  +{PRESET_PROJECT_TASK_XP} XP
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mb-3 rounded-2xl border-2 border-dashed border-[#b8cff8] bg-white p-3">
+          <p className="mb-2 text-xs font-black text-[#66799e]">
+            Tarefa propria vale +{CUSTOM_PROJECT_TASK_XP} XP
+          </p>
+          <div className="flex gap-2">
+            <input
+              className="h-11 min-w-0 flex-1 rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-bold text-[#102b55] outline-none transition focus:border-[#1f5fbf]"
+              maxLength={38}
+              placeholder="Ex: visitar alguem"
+              value={customTaskLabel}
+              onChange={(event) => setCustomTaskLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addCustomTask();
+                }
+              }}
+            />
+            <button
+              className="h-11 shrink-0 rounded-2xl bg-[#102b55] px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!canAddCustomTask}
+              onClick={addCustomTask}
+              type="button"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {selectedTasks.length > 0 ? (
+          <div className="mb-3 space-y-2">
+            <p className="text-xs font-black text-[#66799e]">Selecionadas</p>
+            {selectedTasks.map((task) => (
+              <div
+                className="flex min-h-10 items-center gap-2 rounded-2xl bg-[#eaf1ff] px-3 text-sm font-black text-[#102b55]"
+                key={`${task.source}-${task.label}`}
+              >
+                <span className="min-w-0 flex-1">{task.label}</span>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] text-[#1f5fbf]">
+                  +{task.source === "custom" ? CUSTOM_PROJECT_TASK_XP : PRESET_PROJECT_TASK_XP} XP
+                </span>
+                <button
+                  aria-label={`Remover ${task.label}`}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-black text-[#1f5fbf]"
+                  onClick={() => removeTask(task.label)}
+                  type="button"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <button
+          className="h-12 w-full rounded-2xl bg-[#1f5fbf] text-sm font-black text-white shadow-[0_5px_0_#123f86] transition active:translate-y-1 active:shadow-[0_2px_0_#123f86] disabled:cursor-not-allowed disabled:opacity-55"
+          disabled={!canCreate}
+          onClick={handleCreateProject}
+          type="button"
+        >
+          {projectSaving ? "Salvando..." : "Criar projeto"}
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {activeProjects.length === 0 && completedProjects.length === 0 ? (
+          <p className="rounded-2xl bg-[#eaf1ff] px-4 py-3 text-sm font-bold text-[#4b638f]">
+            Crie seu primeiro projeto para ganhar XP extra fora das metas diarias.
+          </p>
+        ) : null}
+
+        {activeProjects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            pendingProjectTaskId={pendingProjectTaskId}
+            project={project}
+            projectSaving={projectSaving}
+            onCompleteProjectTask={onCompleteProjectTask}
+          />
+        ))}
+
+        {completedProjects.slice(0, 2).map((project) => (
+          <ProjectCard
+            key={project.id}
+            pendingProjectTaskId={pendingProjectTaskId}
+            project={project}
+            projectSaving={projectSaving}
+            onCompleteProjectTask={onCompleteProjectTask}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type ProjectCardProps = {
+  pendingProjectTaskId: string | null;
+  project: PersonalProject;
+  projectSaving: boolean;
+  onCompleteProjectTask: (projectId: string, taskId: string) => Promise<void>;
+};
+
+function ProjectCard({
+  pendingProjectTaskId,
+  project,
+  projectSaving,
+  onCompleteProjectTask,
+}: ProjectCardProps) {
+  const todayKey = getTodayKey();
+  const targetDays = Math.max(1, project.targetDays ?? 1);
+  const completedDays = Math.min(project.completedDays ?? 0, targetDays);
+  const dayProgress = Math.round((completedDays / targetDays) * 100);
+  const completedTasksToday = project.tasks.filter(
+    (task) => task.completed || task.lastCompletedDate === todayKey,
+  ).length;
+
+  return (
+    <div
+      className={`rounded-[24px] border p-3 ${
+        project.completed ? "border-[#b8cff8] bg-[#eaf1ff]" : "border-[#d7e3fb] bg-white"
+      }`}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black text-[#1f5fbf]">
+            {PROJECT_AREA_LABELS[project.area]} · {PROJECT_DURATION_LABELS[project.duration]}
+            {project.targetDays ? ` · ${project.targetDays} dias` : ""}
+          </p>
+          <h3 className="break-words text-base font-black text-[#102b55]">{project.title}</h3>
+          <p className="mt-1 text-xs font-bold text-[#66799e]">
+            Dia {completedDays}/{targetDays} · Hoje {completedTasksToday}/{project.tasks.length}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
+          Bonus +{project.xpReward} XP
+        </span>
+      </div>
+
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-[#edf3ff]">
+        <div
+          className="h-full rounded-full bg-[#1f5fbf] transition-all"
+          style={{ width: `${dayProgress}%` }}
+        />
+      </div>
+
+      <div className="space-y-2">
+        {project.tasks.map((task) => {
+          const pending = pendingProjectTaskId === `${project.id}:${task.id}`;
+          const taskXp =
+            task.xpReward ??
+            (task.source === "custom" ? CUSTOM_PROJECT_TASK_XP : PRESET_PROJECT_TASK_XP);
+          const doneToday = task.completed || task.lastCompletedDate === todayKey;
+
+          return (
+            <button
+              className={`flex min-h-11 w-full items-center gap-2 rounded-2xl px-3 text-left text-sm font-bold transition ${
+                doneToday ? "bg-[#dce8ff] text-[#102b55]" : "bg-[#f8fbff] text-[#4b638f]"
+              } disabled:cursor-not-allowed disabled:opacity-70`}
+              disabled={projectSaving || project.completed || doneToday}
+              key={task.id}
+              onClick={() => onCompleteProjectTask(project.id, task.id)}
+              type="button"
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                  doneToday ? "bg-[#1f5fbf] text-white" : "bg-[#eaf1ff] text-[#1f5fbf]"
+                }`}
+              >
+                {pending ? "..." : doneToday ? "✓" : "+"}
+              </span>
+              <span className="min-w-0 flex-1">{task.label}</span>
+              <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-[#1f5fbf]">
+                {doneToday ? "Hoje" : `+${taskXp} XP`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {project.completed ? (
+        <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-black text-[#1f5fbf]">
+          Projeto concluido
+        </p>
+      ) : null}
+    </div>
+  );
+}

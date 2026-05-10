@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bloom",
-  description: "Cuide da sua planta diariamente e veja ela florescer.",
+  title: "Projeto Teâncum",
+  description: "Uma jornada gamificada de oracao, escrituras e progresso diario.",
 };
 
 export default function RootLayout({
