@@ -28,10 +28,10 @@ export function TeancumApp() {
             <p className="mb-2 text-sm font-bold uppercase tracking-[0.18em] text-[#1f5fbf]">
               Projeto Teâncum
             </p>
-            <h1 className="text-2xl font-black text-[#102b55]">Firebase ainda nao configurado</h1>
+            <h1 className="text-2xl font-black text-[#102b55]">Firebase ainda não configurado</h1>
             <p className="mt-3 text-sm leading-6 text-[#4b638f]">
               Crie um arquivo <span className="font-semibold text-[#102b55]">.env.local</span> com as chaves
-              publicas do Firebase para ativar login anonimo e Firestore.
+              públicas do Firebase para ativar login anônimo e Firestore.
             </p>
             {teancum.error ? (
               <p className="mt-4 rounded-2xl bg-[#fff7dc] px-4 py-3 text-sm font-bold text-[#7a6418]">
@@ -47,8 +47,10 @@ export function TeancumApp() {
   if (!teancum.profile) {
     return (
       <Onboarding
+        accountSaving={teancum.accountSaving}
         error={teancum.error}
         saving={teancum.saving}
+        onSignInGoogle={teancum.signInGoogleAccount}
         onStart={teancum.startJourney}
       />
     );
@@ -56,21 +58,38 @@ export function TeancumApp() {
 
   return (
     <Dashboard
+      accountEmail={teancum.accountEmail}
+      accountLinked={teancum.accountLinked}
+      accountSaving={teancum.accountSaving}
+      activeBattle={teancum.activeBattle}
       error={teancum.error}
       actionMessage={teancum.actionMessage}
+      battleSaving={teancum.battleSaving}
       introSaving={teancum.introSaving}
+      leaderboard={teancum.leaderboard}
+      leaderboardError={teancum.leaderboardError}
+      leaderboardLoading={teancum.leaderboardLoading}
       levelCelebration={teancum.levelCelebration}
+      onBuyItem={teancum.buyShopItem}
+      onCloseBattle={teancum.closeBattle}
       onCompleteProjectTask={teancum.completeProjectTask}
       onCompleteTask={teancum.completeTask}
       onCreateProject={teancum.createProject}
+      onCreateBattle={teancum.createBattle}
+      onEquipItem={teancum.equipShopItem}
       onFinishIntro={teancum.finishIntro}
+      onJoinBattle={teancum.joinBattle}
+      onLinkGoogleAccount={teancum.linkGoogleAccount}
+      onRefreshLeaderboard={teancum.refreshLeaderboard}
       pendingProjectTaskId={teancum.pendingProjectTaskId}
+      pendingShopItemId={teancum.pendingShopItemId}
       pendingTaskId={teancum.pendingTaskId}
       profile={teancum.profile}
       progress={teancum.progress}
       projectSaving={teancum.projectSaving}
       projects={teancum.projects}
       saving={teancum.saving}
+      shopSaving={teancum.shopSaving}
       taskFeedbackId={teancum.taskFeedbackId}
     />
   );

@@ -61,6 +61,25 @@ input {
   animation: character-evolve 1200ms ease both;
 }
 
+@keyframes hero-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  35% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+.animate-hero-glow {
+  animation: hero-glow 900ms ease-out both;
+}
+
 @keyframes task-complete {
   0% {
     transform: scale(1);

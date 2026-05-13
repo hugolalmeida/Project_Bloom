@@ -17,7 +17,7 @@ export function hasFirebaseConfig() {
 
 export function getFirebaseApp(): FirebaseApp {
   if (!hasFirebaseConfig()) {
-    throw new Error("Firebase nao foi configurado. Preencha o arquivo .env.local.");
+    throw new Error("Firebase não foi configurado. Preencha o arquivo .env.local.");
   }
 
   return getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);

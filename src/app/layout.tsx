@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Projeto Teâncum",
-  description: "Uma jornada gamificada de oracao, escrituras e progresso diario.",
+  description: "Uma jornada gamificada de oração, escrituras e progresso diário.",
 };
 
 export default function RootLayout({

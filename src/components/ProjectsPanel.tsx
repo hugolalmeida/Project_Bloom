@@ -7,14 +7,18 @@ import {
   PROJECT_AREA_LABELS,
   PROJECT_DURATION_LABELS,
   PROJECT_TASK_LIBRARY,
+  PROJECT_TASK_COINS,
   CUSTOM_PROJECT_TASK_XP,
+  EXTRA_CUSTOM_PROJECT_TASK_XP,
   MAX_ACTIVE_PROJECTS,
   MAX_PROJECT_TASKS,
   MIN_PROJECT_DAYS,
   PRESET_PROJECT_TASK_XP,
   clampProjectDays,
+  getProjectCoinReward,
   getProjectDurationFromDays,
   getProjectRewardFromDays,
+  getProjectTaskXp,
   getTodayKey,
 } from "@/lib/game";
 import type {
@@ -51,19 +55,24 @@ export function ProjectsPanel({
   const [targetDays, setTargetDays] = useState(MIN_PROJECT_DAYS);
   const [selectedTasks, setSelectedTasks] = useState<SelectedProjectTask[]>([]);
   const [customTaskLabel, setCustomTaskLabel] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const suggestedTasks = PROJECT_TASK_LIBRARY[area];
   const duration = getProjectDurationFromDays(targetDays);
   const reward = getProjectRewardFromDays(targetDays);
+  const coinReward = getProjectCoinReward(duration);
   const activeProjects = projects.filter((project) => !project.completed);
   const completedProjects = projects.filter((project) => project.completed);
   const reachedActiveLimit = activeProjects.length >= MAX_ACTIVE_PROJECTS;
+  const customTaskCount = selectedTasks.filter((task) => task.source === "custom").length;
+  const customTaskLimitReached = selectedTasks.length >= MAX_PROJECT_TASKS;
+  const nextCustomTaskXp = getProjectTaskXp("custom", customTaskCount);
 
   const canCreate = selectedTasks.length > 0 && !projectSaving && !reachedActiveLimit;
   const customTaskText = customTaskLabel.trim();
   const canAddCustomTask =
     customTaskText.length >= 3 &&
-    selectedTasks.length < MAX_PROJECT_TASKS &&
+    !customTaskLimitReached &&
     !hasSelectedTask(customTaskText);
 
   const defaultTitle = useMemo(() => {
@@ -101,6 +110,16 @@ export function ProjectsPanel({
     setSelectedTasks((currentTasks) => currentTasks.filter((task) => task.label !== label));
   }
 
+  function getSelectedTaskXp(task: SelectedProjectTask, taskIndex: number) {
+    const customTaskIndex =
+      task.source === "custom"
+        ? selectedTasks.slice(0, taskIndex + 1).filter((item) => item.source === "custom").length -
+          1
+        : 0;
+
+    return getProjectTaskXp(task.source, customTaskIndex);
+  }
+
   async function handleCreateProject() {
     if (!canCreate) return;
 
@@ -114,6 +133,7 @@ export function ProjectsPanel({
     setTitle("");
     setSelectedTasks([]);
     setCustomTaskLabel("");
+    setShowCreateForm(false);
   }
 
   return (
@@ -128,12 +148,55 @@ export function ProjectsPanel({
             {activeProjects.length}/{MAX_ACTIVE_PROJECTS} projetos ativos
           </p>
         </div>
-        <span className="rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
-          Bonus +{reward} XP
-        </span>
+        <button
+          className="h-11 shrink-0 rounded-2xl bg-[#1f5fbf] px-4 text-xs font-black text-white shadow-[0_4px_0_#123f86] transition active:translate-y-1 active:shadow-[0_2px_0_#123f86] disabled:cursor-not-allowed disabled:opacity-55"
+          disabled={reachedActiveLimit && !showCreateForm}
+          onClick={() => setShowCreateForm((currentValue) => !currentValue)}
+          type="button"
+        >
+          {showCreateForm ? "Fechar" : "Novo projeto"}
+        </button>
       </div>
 
+      <div className="mb-4 space-y-3">
+        {activeProjects.length === 0 && completedProjects.length === 0 ? (
+          <p className="rounded-2xl bg-[#eaf1ff] px-4 py-3 text-sm font-bold text-[#4b638f]">
+            Crie seu primeiro projeto para ganhar XP extra fora das metas diárias.
+          </p>
+        ) : null}
+
+        {activeProjects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            pendingProjectTaskId={pendingProjectTaskId}
+            project={project}
+            projectSaving={projectSaving}
+            onCompleteProjectTask={onCompleteProjectTask}
+          />
+        ))}
+
+        {completedProjects.slice(0, 2).map((project) => (
+          <ProjectCard
+            key={project.id}
+            pendingProjectTaskId={pendingProjectTaskId}
+            project={project}
+            projectSaving={projectSaving}
+            onCompleteProjectTask={onCompleteProjectTask}
+          />
+        ))}
+      </div>
+
+      {showCreateForm ? (
       <div className="rounded-[24px] border border-[#d7e3fb] bg-[#f8fbff] p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-black text-[#102b55]">Novo projeto</h3>
+            <p className="text-xs font-bold text-[#66799e]">Escolha área, dias e tarefas.</p>
+          </div>
+          <span className="rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
+            Bônus +{reward} XP · 🪙 {coinReward}
+          </span>
+        </div>
         {reachedActiveLimit ? (
           <p className="mb-3 rounded-2xl bg-[#fff2b8] px-3 py-2 text-xs font-black text-[#7a6418]">
             Limite atingido. Conclua um projeto ativo antes de criar outro.
@@ -150,7 +213,7 @@ export function ProjectsPanel({
 
         <div className="mb-3 grid grid-cols-2 gap-2">
           <div>
-            <p className="mb-1 text-xs font-black text-[#66799e]">Area</p>
+            <p className="mb-1 text-xs font-black text-[#66799e]">Área</p>
             <select
               className="h-11 w-full rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-black text-[#102b55] outline-none"
               value={area}
@@ -222,13 +285,28 @@ export function ProjectsPanel({
 
         <div className="mb-3 rounded-2xl border-2 border-dashed border-[#b8cff8] bg-white p-3">
           <p className="mb-2 text-xs font-black text-[#66799e]">
-            Tarefa propria vale +{CUSTOM_PROJECT_TASK_XP} XP
+            Tarefa própria: 3 primeiras +{CUSTOM_PROJECT_TASK_XP} XP, 4ª +
+            {EXTRA_CUSTOM_PROJECT_TASK_XP} XP
           </p>
+          <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] font-black">
+            <span className="rounded-2xl bg-[#eaf1ff] px-3 py-2 text-[#1f5fbf]">
+              Próprias {customTaskCount}/{MAX_PROJECT_TASKS}
+            </span>
+            <span
+              className={`rounded-2xl px-3 py-2 ${
+                nextCustomTaskXp === EXTRA_CUSTOM_PROJECT_TASK_XP
+                  ? "bg-[#fff2b8] text-[#7a6418]"
+                  : "bg-[#eaf1ff] text-[#1f5fbf]"
+              }`}
+            >
+              Próxima +{nextCustomTaskXp} XP
+            </span>
+          </div>
           <div className="flex gap-2">
             <input
               className="h-11 min-w-0 flex-1 rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-bold text-[#102b55] outline-none transition focus:border-[#1f5fbf]"
               maxLength={38}
-              placeholder="Ex: visitar alguem"
+              placeholder="Ex: visitar alguém"
               value={customTaskLabel}
               onChange={(event) => setCustomTaskLabel(event.target.value)}
               onKeyDown={(event) => {
@@ -247,30 +325,52 @@ export function ProjectsPanel({
               +
             </button>
           </div>
+          {customTaskCount >= 3 && !customTaskLimitReached ? (
+            <p className="mt-2 rounded-2xl bg-[#fff8d7] px-3 py-2 text-[11px] font-black text-[#7a6418]">
+              A 4ª tarefa própria entra como extra e vale menos XP.
+            </p>
+          ) : null}
+          {customTaskLimitReached ? (
+            <p className="mt-2 rounded-2xl bg-[#eaf1ff] px-3 py-2 text-[11px] font-black text-[#1f5fbf]">
+              Limite de {MAX_PROJECT_TASKS} tarefas atingido para este projeto.
+            </p>
+          ) : null}
         </div>
 
         {selectedTasks.length > 0 ? (
           <div className="mb-3 space-y-2">
             <p className="text-xs font-black text-[#66799e]">Selecionadas</p>
-            {selectedTasks.map((task) => (
-              <div
-                className="flex min-h-10 items-center gap-2 rounded-2xl bg-[#eaf1ff] px-3 text-sm font-black text-[#102b55]"
-                key={`${task.source}-${task.label}`}
-              >
-                <span className="min-w-0 flex-1">{task.label}</span>
-                <span className="rounded-full bg-white px-2 py-1 text-[11px] text-[#1f5fbf]">
-                  +{task.source === "custom" ? CUSTOM_PROJECT_TASK_XP : PRESET_PROJECT_TASK_XP} XP
-                </span>
-                <button
-                  aria-label={`Remover ${task.label}`}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-black text-[#1f5fbf]"
-                  onClick={() => removeTask(task.label)}
-                  type="button"
+            {selectedTasks.map((task, taskIndex) => {
+              const selectedTaskXp = getSelectedTaskXp(task, taskIndex);
+              const isReducedCustomTask =
+                task.source === "custom" && selectedTaskXp === EXTRA_CUSTOM_PROJECT_TASK_XP;
+
+              return (
+                <div
+                  className="flex min-h-10 items-center gap-2 rounded-2xl bg-[#eaf1ff] px-3 text-sm font-black text-[#102b55]"
+                  key={`${task.source}-${task.label}`}
                 >
-                  x
-                </button>
-              </div>
-            ))}
+                  <span className="min-w-0 flex-1">{task.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-1 text-[11px] ${
+                      isReducedCustomTask
+                        ? "bg-[#fff2b8] text-[#7a6418]"
+                        : "bg-white text-[#1f5fbf]"
+                    }`}
+                  >
+                    {isReducedCustomTask ? "Extra " : ""}+{selectedTaskXp} XP
+                  </span>
+                  <button
+                    aria-label={`Remover ${task.label}`}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-black text-[#1f5fbf]"
+                    onClick={() => removeTask(task.label)}
+                    type="button"
+                  >
+                    x
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : null}
 
@@ -283,11 +383,13 @@ export function ProjectsPanel({
           {projectSaving ? "Salvando..." : "Criar projeto"}
         </button>
       </div>
+      ) : null}
 
+      {false ? (
       <div className="mt-4 space-y-3">
         {activeProjects.length === 0 && completedProjects.length === 0 ? (
           <p className="rounded-2xl bg-[#eaf1ff] px-4 py-3 text-sm font-bold text-[#4b638f]">
-            Crie seu primeiro projeto para ganhar XP extra fora das metas diarias.
+            Crie seu primeiro projeto para ganhar XP extra fora das metas diárias.
           </p>
         ) : null}
 
@@ -311,6 +413,7 @@ export function ProjectsPanel({
           />
         ))}
       </div>
+      ) : null}
     </section>
   );
 }
@@ -335,6 +438,7 @@ function ProjectCard({
   const completedTasksToday = project.tasks.filter(
     (task) => task.completed || task.lastCompletedDate === todayKey,
   ).length;
+  const projectCoinReward = getProjectCoinReward(project.duration);
 
   return (
     <div
@@ -354,7 +458,7 @@ function ProjectCard({
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
-          Bonus +{project.xpReward} XP
+          Bônus +{project.xpReward} XP · 🪙 {projectCoinReward}
         </span>
       </div>
 
@@ -367,10 +471,15 @@ function ProjectCard({
 
       <div className="space-y-2">
         {project.tasks.map((task) => {
+          const taskIndex = project.tasks.findIndex((projectTask) => projectTask.id === task.id);
+          const customTaskIndex =
+            task.source === "custom"
+              ? project.tasks
+                  .slice(0, taskIndex + 1)
+                  .filter((projectTask) => projectTask.source === "custom").length - 1
+              : 0;
           const pending = pendingProjectTaskId === `${project.id}:${task.id}`;
-          const taskXp =
-            task.xpReward ??
-            (task.source === "custom" ? CUSTOM_PROJECT_TASK_XP : PRESET_PROJECT_TASK_XP);
+          const taskXp = task.xpReward ?? getProjectTaskXp(task.source, customTaskIndex);
           const doneToday = task.completed || task.lastCompletedDate === todayKey;
 
           return (
@@ -392,7 +501,7 @@ function ProjectCard({
               </span>
               <span className="min-w-0 flex-1">{task.label}</span>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-[#1f5fbf]">
-                {doneToday ? "Hoje" : `+${taskXp} XP`}
+                {doneToday ? "Hoje" : `+${taskXp} XP · 🪙 ${PROJECT_TASK_COINS}`}
               </span>
             </button>
           );
@@ -401,7 +510,7 @@ function ProjectCard({
 
       {project.completed ? (
         <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-black text-[#1f5fbf]">
-          Projeto concluido
+          Projeto concluído
         </p>
       ) : null}
     </div>
