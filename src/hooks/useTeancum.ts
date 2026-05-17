@@ -6,12 +6,14 @@ import {
   linkWithPopup,
   onAuthStateChanged,
   signInAnonymously,
+  signOut,
   signInWithPopup,
   type User,
 } from "firebase/auth";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -29,6 +31,7 @@ import {
   DAILY_BONUS_XP,
   DAILY_COMPLETE_COINS,
   DAILY_TASK_COINS,
+  DEFAULT_GOALS,
   areAllTasksComplete,
   formatCoins,
   getDailyProgressId,
@@ -59,8 +62,10 @@ import type {
   LeaderboardEntry,
   OnboardingData,
   PersonalProject,
+  ProjectTask,
   ShopItemId,
   TaskId,
+  UserGoals,
   UserProfile,
 } from "@/types/teancum";
 
@@ -146,6 +151,19 @@ function getBattleCode() {
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
+function refreshProjectTaskRewards(tasks: ProjectTask[]) {
+  let customTaskCount = 0;
+
+  return tasks.map((task) => {
+    const customTaskIndex = task.source === "custom" ? customTaskCount++ : 0;
+
+    return {
+      ...task,
+      xpReward: getProjectTaskXp(task.source, customTaskIndex),
+    };
+  });
+}
+
 export function useTeancum() {
   const configured = useMemo(() => hasFirebaseConfig(), []);
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -175,6 +193,7 @@ export function useTeancum() {
   const [levelCelebration, setLevelCelebration] = useState(false);
   const taskFeedbackTimerRef = useRef<number | null>(null);
   const levelTimerRef = useRef<number | null>(null);
+  const preferSignInRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -223,7 +242,11 @@ export function useTeancum() {
     }));
 
     setProjects(
-      loadedProjects.sort((a, b) => Number(a.completed) - Number(b.completed)),
+      loadedProjects.sort(
+        (a, b) =>
+          Number(a.archived ?? false) - Number(b.archived ?? false) ||
+          Number(a.completed) - Number(b.completed),
+      ),
     );
   }, []);
 
@@ -330,6 +353,14 @@ export function useTeancum() {
         setLoading(true);
         setError(null);
 
+        if (!user && preferSignInRef.current) {
+          setAuthUser(null);
+          setProfile(null);
+          setProgress(null);
+          setProjects([]);
+          return;
+        }
+
         const currentUser = user ?? (await signInAnonymously(auth)).user;
         setAuthUser(currentUser);
         await loadUserData(currentUser);
@@ -364,6 +395,7 @@ export function useTeancum() {
         const auth = getFirebaseAuth();
         const db = getFirebaseDb();
         const user = authUser ?? auth.currentUser ?? (await signInAnonymously(auth)).user;
+        preferSignInRef.current = false;
 
         const newProfile: UserProfile = {
           uid: user.uid,
@@ -438,7 +470,6 @@ export function useTeancum() {
 
       if (!currentUser.isAnonymous) {
         setActionMessage("Seu progresso já está salvo com uma conta.");
-        return;
       }
 
       const provider = new GoogleAuthProvider();
@@ -484,6 +515,7 @@ export function useTeancum() {
       provider.setCustomParameters({ prompt: "select_account" });
 
       const credential = await signInWithPopup(auth, provider);
+      preferSignInRef.current = false;
       setAuthUser(credential.user);
       await loadUserData(credential.user);
 
@@ -495,6 +527,32 @@ export function useTeancum() {
       setAccountSaving(false);
     }
   }, [configured, loadUserData]);
+
+  const switchAccount = useCallback(async () => {
+    if (!configured) return;
+
+    setAccountSaving(true);
+    setActionMessage(null);
+    setError(null);
+
+    try {
+      const auth = getFirebaseAuth();
+      preferSignInRef.current = true;
+      await signOut(auth);
+      setAuthUser(null);
+      setProfile(null);
+      setProgress(null);
+      setProjects([]);
+      setActiveBattleId(null);
+      setActiveBattle(null);
+      setActionMessage("Conta desconectada. Entre com Google para continuar sua jornada.");
+    } catch (caughtError) {
+      console.error("Erro ao trocar conta", caughtError);
+      setError("Não consegui sair desta conta agora. Tente novamente.");
+    } finally {
+      setAccountSaving(false);
+    }
+  }, [configured]);
 
   const buyShopItem = useCallback(
     async (itemId: ShopItemId) => {
@@ -822,6 +880,132 @@ export function useTeancum() {
     }
   }, [profile]);
 
+  const updateDailyGoals = useCallback(
+    async (goals: UserGoals) => {
+      if (!profile) return;
+
+      const trimmedCustomTask =
+        goals.taskLabels?.custom?.trim() ?? goals.customTaskLabel?.trim() ?? "";
+      const validTaskIds: TaskId[] = ["prayer", "scripture", "reflect", "custom"];
+      const nextDisabledTaskIds = Array.from(
+        new Set((goals.disabledTaskIds ?? []).filter((taskId) => validTaskIds.includes(taskId))),
+      );
+      const nextTaskLabels = Object.fromEntries(
+        Object.entries(goals.taskLabels ?? {})
+          .map(([taskId, label]) => [taskId, label?.trim() ?? ""])
+          .filter(
+            ([taskId, label]) =>
+              validTaskIds.includes(taskId as TaskId) && typeof label === "string" && label.length > 0,
+          ),
+      ) as Partial<Record<TaskId, string>>;
+
+      const dateKey = getTodayKey();
+
+      setSaving(true);
+      setActionMessage(null);
+      setError(null);
+
+      try {
+        const db = getFirebaseDb();
+        const userRef = doc(db, "users", profile.uid);
+        const progressRef = doc(db, "dailyProgress", getDailyProgressId(profile.uid, dateKey));
+
+        const result = await runTransaction(db, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          const progressSnap = await transaction.get(progressRef);
+
+          if (!userSnap.exists()) {
+            throw new Error("missing-profile");
+          }
+
+          const freshProfile = normalizeProfile(userSnap.data() as UserProfile);
+          const nextGoals: UserGoals = {
+            ...DEFAULT_GOALS,
+            ...freshProfile.goals,
+            prayerTarget: goals.prayerTarget,
+            scriptureTarget: goals.scriptureTarget,
+            disabledTaskIds: nextDisabledTaskIds,
+            taskLabels: {
+              ...(freshProfile.goals?.taskLabels ?? {}),
+              ...nextTaskLabels,
+            },
+          };
+
+          if (trimmedCustomTask) {
+            nextGoals.customTaskLabel = trimmedCustomTask;
+            nextGoals.taskLabels = {
+              ...(nextGoals.taskLabels ?? {}),
+              custom: trimmedCustomTask,
+            };
+          } else {
+            delete nextGoals.customTaskLabel;
+            if (nextGoals.taskLabels) {
+              delete nextGoals.taskLabels.custom;
+            }
+          }
+
+          if (nextGoals.taskLabels && Object.keys(nextGoals.taskLabels).length === 0) {
+            delete nextGoals.taskLabels;
+          }
+
+          if (nextDisabledTaskIds.length === 0) {
+            delete nextGoals.disabledTaskIds;
+          }
+
+          const nextProfile: UserProfile = {
+            ...freshProfile,
+            goals: nextGoals,
+          };
+          const freshProgress = progressSnap.exists()
+            ? (progressSnap.data() as DailyProgress)
+            : createEmptyProgress(profile.uid, dateKey);
+          const nextTaskProgress = normalizeTaskProgress(freshProgress, nextProfile);
+          if (freshProgress.completedAll) {
+            for (const task of getDailyTasks(nextProfile)) {
+              nextTaskProgress[task.id] = task.target;
+            }
+          }
+          const completedAll = freshProgress.completedAll
+            ? true
+            : areAllTasksComplete(nextTaskProgress, nextProfile);
+          const nextProgress: DailyProgress = {
+            ...freshProgress,
+            uid: profile.uid,
+            dateKey,
+            taskProgress: nextTaskProgress,
+            completedAll,
+          };
+
+          transaction.update(userRef, {
+            goals: nextGoals,
+            updatedAt: serverTimestamp(),
+          });
+          transaction.set(
+            progressRef,
+            {
+              ...nextProgress,
+              ...(progressSnap.exists() ? {} : { createdAt: serverTimestamp() }),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+          return { nextProfile, nextProgress };
+        });
+
+        setProfile(result.nextProfile);
+        setProgress(result.nextProgress);
+        setActionMessage("Metas diárias atualizadas.");
+      } catch (caughtError) {
+        console.error("Erro ao editar metas diárias", caughtError);
+        setError("Não consegui salvar as metas diárias. Tente novamente.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [profile],
+  );
+
   const createProject = useCallback(
     async ({ title, area, targetDays, tasks }: CreateProjectData) => {
       const normalizedTasks = tasks
@@ -833,7 +1017,9 @@ export function useTeancum() {
 
       if (!profile || normalizedTasks.length === 0) return;
 
-      const activeProjectCount = projects.filter((project) => !project.completed).length;
+      const activeProjectCount = projects.filter(
+        (project) => !project.completed && !project.archived,
+      ).length;
 
       if (activeProjectCount >= MAX_ACTIVE_PROJECTS) {
         setActionMessage(
@@ -898,6 +1084,246 @@ export function useTeancum() {
       }
     },
     [profile, projects],
+  );
+
+  const deleteProject = useCallback(
+    async (projectId: string) => {
+      if (!profile) return;
+
+      setProjectSaving(true);
+      setActionMessage(null);
+      setError(null);
+
+      try {
+        const db = getFirebaseDb();
+        const projectRef = doc(db, "users", profile.uid, "projects", projectId);
+        const projectSnap = await getDoc(projectRef);
+
+        if (!projectSnap.exists()) {
+          throw new Error("missing-project");
+        }
+
+        const freshProject = {
+          id: projectSnap.id,
+          ...(projectSnap.data() as Omit<PersonalProject, "id">),
+        };
+
+        if (freshProject.completed) {
+          const archivedProject: PersonalProject = {
+            ...freshProject,
+            archived: true,
+            archivedAt: getTodayKey(),
+          };
+
+          await updateDoc(projectRef, {
+            archived: true,
+            archivedAt: getTodayKey(),
+            updatedAt: serverTimestamp(),
+          });
+
+          setProjects((currentProjects) =>
+            currentProjects.map((project) =>
+              project.id === projectId ? archivedProject : project,
+            ),
+          );
+          setActionMessage("Projeto concluído arquivado.");
+          return;
+        }
+
+        await deleteDoc(projectRef);
+
+        setProjects((currentProjects) =>
+          currentProjects.filter((project) => project.id !== projectId),
+        );
+        setActionMessage("Projeto em andamento removido.");
+      } catch (caughtError) {
+        console.error("Erro ao remover projeto", caughtError);
+        setError("NÃ£o consegui remover o projeto. Tente novamente.");
+      } finally {
+        setProjectSaving(false);
+      }
+    },
+    [profile],
+  );
+
+  const addProjectTask = useCallback(
+    async (projectId: string, label: string) => {
+      if (!profile) return;
+
+      const trimmedLabel = label.trim();
+      if (trimmedLabel.length < 3) return;
+
+      setProjectSaving(true);
+      setPendingProjectTaskId(`${projectId}:new`);
+      setActionMessage(null);
+      setError(null);
+
+      try {
+        const db = getFirebaseDb();
+        const projectRef = doc(db, "users", profile.uid, "projects", projectId);
+
+        const result = await runTransaction(db, async (transaction) => {
+          const projectSnap = await transaction.get(projectRef);
+
+          if (!projectSnap.exists()) {
+            throw new Error("missing-project");
+          }
+
+          const freshProject = {
+            id: projectSnap.id,
+            ...(projectSnap.data() as Omit<PersonalProject, "id">),
+          };
+
+          if (freshProject.completed) {
+            return { added: false, reason: "completed" as const, nextProject: freshProject };
+          }
+
+          if (freshProject.tasks.length >= MAX_PROJECT_TASKS) {
+            return { added: false, reason: "limit" as const, nextProject: freshProject };
+          }
+
+          const alreadyExists = freshProject.tasks.some(
+            (task) => task.label.trim().toLowerCase() === trimmedLabel.toLowerCase(),
+          );
+
+          if (alreadyExists) {
+            return { added: false, reason: "duplicate" as const, nextProject: freshProject };
+          }
+
+          const nextTasks = refreshProjectTaskRewards([
+            ...freshProject.tasks,
+            {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              label: trimmedLabel,
+              source: "custom" as const,
+              completedCount: 0,
+              lastCompletedDate: null,
+              completed: false,
+            },
+          ]);
+          const nextProject: PersonalProject = {
+            ...freshProject,
+            tasks: nextTasks,
+          };
+
+          transaction.update(projectRef, {
+            tasks: nextTasks,
+            updatedAt: serverTimestamp(),
+          });
+
+          return { added: true, reason: "added" as const, nextProject };
+        });
+
+        setProjects((currentProjects) =>
+          currentProjects.map((project) =>
+            project.id === projectId ? result.nextProject : project,
+          ),
+        );
+
+        if (!result.added) {
+          setActionMessage(
+            result.reason === "limit"
+              ? `Limite de ${MAX_PROJECT_TASKS} atividades por projeto.`
+              : result.reason === "duplicate"
+                ? "Essa atividade ja esta no projeto."
+                : "Projeto concluido nao pode receber nova atividade.",
+          );
+          return;
+        }
+
+        setActionMessage("Atividade adicionada ao projeto.");
+      } catch (caughtError) {
+        console.error("Erro ao adicionar atividade", caughtError);
+        setError("NÃ£o consegui adicionar a atividade. Tente novamente.");
+      } finally {
+        setPendingProjectTaskId(null);
+        setProjectSaving(false);
+      }
+    },
+    [profile],
+  );
+
+  const removeProjectTask = useCallback(
+    async (projectId: string, taskId: string) => {
+      if (!profile) return;
+
+      setProjectSaving(true);
+      setPendingProjectTaskId(`${projectId}:${taskId}`);
+      setActionMessage(null);
+      setError(null);
+
+      try {
+        const db = getFirebaseDb();
+        const projectRef = doc(db, "users", profile.uid, "projects", projectId);
+
+        const result = await runTransaction(db, async (transaction) => {
+          const projectSnap = await transaction.get(projectRef);
+
+          if (!projectSnap.exists()) {
+            throw new Error("missing-project");
+          }
+
+          const freshProject = {
+            id: projectSnap.id,
+            ...(projectSnap.data() as Omit<PersonalProject, "id">),
+          };
+
+          if (freshProject.completed) {
+            return { removed: false, reason: "completed" as const, nextProject: freshProject };
+          }
+
+          if (freshProject.tasks.length <= 1) {
+            return { removed: false, reason: "minimum" as const, nextProject: freshProject };
+          }
+
+          const nextTasks = refreshProjectTaskRewards(
+            freshProject.tasks.filter((task) => task.id !== taskId),
+          );
+
+          if (nextTasks.length === freshProject.tasks.length) {
+            return { removed: false, reason: "missing" as const, nextProject: freshProject };
+          }
+
+          const nextProject: PersonalProject = {
+            ...freshProject,
+            tasks: nextTasks,
+          };
+
+          transaction.update(projectRef, {
+            tasks: nextTasks,
+            updatedAt: serverTimestamp(),
+          });
+
+          return { removed: true, reason: "removed" as const, nextProject };
+        });
+
+        setProjects((currentProjects) =>
+          currentProjects.map((project) =>
+            project.id === projectId ? result.nextProject : project,
+          ),
+        );
+
+        if (!result.removed) {
+          setActionMessage(
+            result.reason === "minimum"
+              ? "O projeto precisa manter pelo menos uma atividade."
+              : result.reason === "completed"
+                ? "Projeto concluido nao pode ser editado."
+                : "Nao encontrei essa atividade no projeto.",
+          );
+          return;
+        }
+
+        setActionMessage("Atividade removida do projeto.");
+      } catch (caughtError) {
+        console.error("Erro ao remover atividade", caughtError);
+        setError("NÃ£o consegui remover a atividade. Tente novamente.");
+      } finally {
+        setPendingProjectTaskId(null);
+        setProjectSaving(false);
+      }
+    },
+    [profile],
   );
 
   const completeProjectTask = useCallback(
@@ -1305,14 +1731,19 @@ export function useTeancum() {
     startJourney,
     signInGoogleAccount,
     linkGoogleAccount,
+    switchAccount,
     buyShopItem,
     equipShopItem,
     createBattle,
     joinBattle,
     closeBattle,
     finishIntro,
+    updateDailyGoals,
     completeTask,
     createProject,
+    deleteProject,
+    addProjectTask,
+    removeProjectTask,
     completeProjectTask,
     refreshLeaderboard,
   };

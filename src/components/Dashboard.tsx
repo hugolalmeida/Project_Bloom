@@ -6,6 +6,7 @@ import { AchievementsPanel } from "@/components/AchievementsPanel";
 import { AdventureIntro } from "@/components/AdventureIntro";
 import { BattlePanel } from "@/components/BattlePanel";
 import { Character } from "@/components/Character";
+import { DailyTaskSettingsPanel } from "@/components/DailyTaskSettingsPanel";
 import { HomeDashboard } from "@/components/HomeDashboard";
 import { ProjectsPanel } from "@/components/ProjectsPanel";
 import { RankPanel } from "@/components/RankPanel";
@@ -28,6 +29,7 @@ import type {
   LeaderboardEntry,
   ShopItemId,
   TaskId,
+  UserGoals,
   UserProfile,
 } from "@/types/teancum";
 import type { CreateProjectData, PersonalProject } from "@/types/teancum";
@@ -60,14 +62,19 @@ type DashboardProps = {
   onFinishIntro: () => Promise<void>;
   onLinkGoogleAccount: () => Promise<void>;
   onRefreshLeaderboard: () => Promise<void>;
+  onSwitchAccount: () => Promise<void>;
   onBuyItem: (itemId: ShopItemId) => Promise<void>;
   onCloseBattle: () => void;
   onCreateBattle: () => Promise<void>;
   onEquipItem: (itemId: ShopItemId) => Promise<void>;
   onJoinBattle: (code: string) => Promise<void>;
+  onUpdateDailyGoals: (goals: UserGoals) => Promise<void>;
   onCompleteTask: (taskId: TaskId) => Promise<void>;
   onCompleteProjectTask: (projectId: string, taskId: string) => Promise<void>;
   onCreateProject: (data: CreateProjectData) => Promise<void>;
+  onDeleteProject: (projectId: string) => Promise<void>;
+  onAddProjectTask: (projectId: string, label: string) => Promise<void>;
+  onRemoveProjectTask: (projectId: string, taskId: string) => Promise<void>;
 };
 
 export function Dashboard({
@@ -86,14 +93,19 @@ export function Dashboard({
   onFinishIntro,
   onLinkGoogleAccount,
   onRefreshLeaderboard,
+  onSwitchAccount,
   onBuyItem,
   onCloseBattle,
   onCreateBattle,
   onEquipItem,
   onJoinBattle,
+  onUpdateDailyGoals,
   onCompleteTask,
   onCompleteProjectTask,
   onCreateProject,
+  onDeleteProject,
+  onAddProjectTask,
+  onRemoveProjectTask,
   pendingTaskId,
   pendingProjectTaskId,
   pendingShopItemId,
@@ -123,7 +135,9 @@ export function Dashboard({
   const tutorialComplete = Boolean(profile.tutorialProject?.rewardClaimed);
   const tutorialReady = !tutorialComplete && profile.completedDays >= tutorialTarget;
   const sequenceLabel = profile.streak === 1 ? "dia seguido" : "dias seguidos";
-  const activeProjectCount = projects.filter((project) => !project.completed).length;
+  const activeProjectCount = projects.filter(
+    (project) => !project.completed && !project.archived,
+  ).length;
   const showAdventureIntro = !profile.introSeen;
 
   return (
@@ -287,6 +301,15 @@ export function Dashboard({
               accountLinked={accountLinked}
               accountSaving={accountSaving}
               onLinkGoogleAccount={onLinkGoogleAccount}
+              onSwitchAccount={onSwitchAccount}
+            />
+          ) : null}
+
+          {activeTab === "profile" ? (
+            <DailyTaskSettingsPanel
+              profile={profile}
+              saving={saving}
+              onUpdateDailyGoals={onUpdateDailyGoals}
             />
           ) : null}
 
@@ -361,6 +384,7 @@ export function Dashboard({
             saving={saving}
             onCompleteProjectTask={onCompleteProjectTask}
             onCompleteTask={onCompleteTask}
+            onUpdateDailyGoals={onUpdateDailyGoals}
           />
           ) : null}
 
@@ -369,8 +393,11 @@ export function Dashboard({
             pendingProjectTaskId={pendingProjectTaskId}
             projectSaving={projectSaving}
             projects={projects}
+            onAddProjectTask={onAddProjectTask}
             onCompleteProjectTask={onCompleteProjectTask}
             onCreateProject={onCreateProject}
+            onDeleteProject={onDeleteProject}
+            onRemoveProjectTask={onRemoveProjectTask}
           />
           ) : null}
 

@@ -6,6 +6,8 @@ export type UserGoals = {
   prayerTarget: number;
   scriptureTarget: number;
   customTaskLabel?: string;
+  disabledTaskIds?: TaskId[];
+  taskLabels?: Partial<Record<TaskId, string>>;
 };
 
 export type AvatarGender = "male" | "female";
@@ -140,6 +142,8 @@ export type PersonalProject = {
   xpReward: number;
   completed: boolean;
   completedAt: string | null;
+  archived?: boolean;
+  archivedAt?: string | null;
 };
 
 export type CreateProjectData = {

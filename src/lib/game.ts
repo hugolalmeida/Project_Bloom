@@ -23,6 +23,15 @@ export const DEFAULT_GOALS: UserGoals = {
   scriptureTarget: 3,
 };
 
+export const DAILY_TASK_IDS: TaskId[] = ["prayer", "scripture", "reflect", "custom"];
+
+export const DEFAULT_DAILY_TASK_LABELS: Record<TaskId, string> = {
+  prayer: "Oração",
+  scripture: "Ler escrituras",
+  reflect: "Registrar reflexao",
+  custom: "",
+};
+
 export const EMPTY_TASK_PROGRESS: TaskProgress = {
   prayer: 0,
   scripture: 0,
@@ -241,41 +250,44 @@ export function getGoals(profile: UserProfile): UserGoals {
 
 export function getDailyTasks(profile: UserProfile): DailyTask[] {
   const goals = getGoals(profile);
+  const disabledTaskIds = new Set(goals.disabledTaskIds ?? []);
+  const taskLabels = goals.taskLabels ?? {};
+  const customLabel = (taskLabels.custom ?? goals.customTaskLabel ?? "").trim();
   const tasks: DailyTask[] = [
     {
       id: "prayer",
-      label: "Oração",
+      label: taskLabels.prayer?.trim() || DEFAULT_DAILY_TASK_LABELS.prayer,
       target: goals.prayerTarget,
       unit: goals.prayerTarget === 1 ? "vez" : "vezes",
       xpPerStep: 8,
     },
     {
       id: "scripture",
-      label: "Ler escrituras",
+      label: taskLabels.scripture?.trim() || DEFAULT_DAILY_TASK_LABELS.scripture,
       target: goals.scriptureTarget,
       unit: goals.scriptureTarget === 1 ? "página" : "páginas",
       xpPerStep: 5,
     },
     {
       id: "reflect",
-      label: "Registrar reflexao",
+      label: taskLabels.reflect?.trim() || DEFAULT_DAILY_TASK_LABELS.reflect,
       target: 1,
       unit: "vez",
       xpPerStep: 10,
     },
   ];
 
-  if (goals.customTaskLabel?.trim()) {
+  if (customLabel) {
     tasks.push({
       id: "custom",
-      label: goals.customTaskLabel.trim(),
+      label: customLabel,
       target: 1,
       unit: "vez",
       xpPerStep: 5,
     });
   }
 
-  return tasks;
+  return tasks.filter((task) => !disabledTaskIds.has(task.id));
 }
 
 export function normalizeTaskProgress(

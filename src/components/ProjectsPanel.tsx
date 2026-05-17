@@ -32,8 +32,11 @@ type ProjectsPanelProps = {
   pendingProjectTaskId: string | null;
   projectSaving: boolean;
   projects: PersonalProject[];
+  onAddProjectTask: (projectId: string, label: string) => Promise<void>;
   onCompleteProjectTask: (projectId: string, taskId: string) => Promise<void>;
   onCreateProject: (data: CreateProjectData) => Promise<void>;
+  onDeleteProject: (projectId: string) => Promise<void>;
+  onRemoveProjectTask: (projectId: string, taskId: string) => Promise<void>;
 };
 
 const projectAreas = Object.keys(PROJECT_AREA_LABELS) as ProjectArea[];
@@ -47,8 +50,11 @@ export function ProjectsPanel({
   pendingProjectTaskId,
   projectSaving,
   projects,
+  onAddProjectTask,
   onCompleteProjectTask,
   onCreateProject,
+  onDeleteProject,
+  onRemoveProjectTask,
 }: ProjectsPanelProps) {
   const [title, setTitle] = useState("");
   const [area, setArea] = useState<ProjectArea>("spiritual");
@@ -61,8 +67,8 @@ export function ProjectsPanel({
   const duration = getProjectDurationFromDays(targetDays);
   const reward = getProjectRewardFromDays(targetDays);
   const coinReward = getProjectCoinReward(duration);
-  const activeProjects = projects.filter((project) => !project.completed);
-  const completedProjects = projects.filter((project) => project.completed);
+  const activeProjects = projects.filter((project) => !project.completed && !project.archived);
+  const completedProjects = projects.filter((project) => project.completed && !project.archived);
   const reachedActiveLimit = activeProjects.length >= MAX_ACTIVE_PROJECTS;
   const customTaskCount = selectedTasks.filter((task) => task.source === "custom").length;
   const customTaskLimitReached = selectedTasks.length >= MAX_PROJECT_TASKS;
@@ -171,7 +177,10 @@ export function ProjectsPanel({
             pendingProjectTaskId={pendingProjectTaskId}
             project={project}
             projectSaving={projectSaving}
+            onAddProjectTask={onAddProjectTask}
             onCompleteProjectTask={onCompleteProjectTask}
+            onDeleteProject={onDeleteProject}
+            onRemoveProjectTask={onRemoveProjectTask}
           />
         ))}
 
@@ -181,7 +190,10 @@ export function ProjectsPanel({
             pendingProjectTaskId={pendingProjectTaskId}
             project={project}
             projectSaving={projectSaving}
+            onAddProjectTask={onAddProjectTask}
             onCompleteProjectTask={onCompleteProjectTask}
+            onDeleteProject={onDeleteProject}
+            onRemoveProjectTask={onRemoveProjectTask}
           />
         ))}
       </div>
@@ -399,7 +411,10 @@ export function ProjectsPanel({
             pendingProjectTaskId={pendingProjectTaskId}
             project={project}
             projectSaving={projectSaving}
+            onAddProjectTask={onAddProjectTask}
             onCompleteProjectTask={onCompleteProjectTask}
+            onDeleteProject={onDeleteProject}
+            onRemoveProjectTask={onRemoveProjectTask}
           />
         ))}
 
@@ -409,7 +424,10 @@ export function ProjectsPanel({
             pendingProjectTaskId={pendingProjectTaskId}
             project={project}
             projectSaving={projectSaving}
+            onAddProjectTask={onAddProjectTask}
             onCompleteProjectTask={onCompleteProjectTask}
+            onDeleteProject={onDeleteProject}
+            onRemoveProjectTask={onRemoveProjectTask}
           />
         ))}
       </div>
@@ -422,15 +440,22 @@ type ProjectCardProps = {
   pendingProjectTaskId: string | null;
   project: PersonalProject;
   projectSaving: boolean;
+  onAddProjectTask: (projectId: string, label: string) => Promise<void>;
   onCompleteProjectTask: (projectId: string, taskId: string) => Promise<void>;
+  onDeleteProject: (projectId: string) => Promise<void>;
+  onRemoveProjectTask: (projectId: string, taskId: string) => Promise<void>;
 };
 
 function ProjectCard({
   pendingProjectTaskId,
   project,
   projectSaving,
+  onAddProjectTask,
   onCompleteProjectTask,
+  onDeleteProject,
+  onRemoveProjectTask,
 }: ProjectCardProps) {
+  const [newTaskLabel, setNewTaskLabel] = useState("");
   const todayKey = getTodayKey();
   const targetDays = Math.max(1, project.targetDays ?? 1);
   const completedDays = Math.min(project.completedDays ?? 0, targetDays);
@@ -439,6 +464,23 @@ function ProjectCard({
     (task) => task.completed || task.lastCompletedDate === todayKey,
   ).length;
   const projectCoinReward = getProjectCoinReward(project.duration);
+  const newTaskText = newTaskLabel.trim();
+  const pendingAdd = pendingProjectTaskId === `${project.id}:new`;
+  const duplicateNewTask = project.tasks.some(
+    (task) => task.label.trim().toLowerCase() === newTaskText.toLowerCase(),
+  );
+  const canAddTask =
+    !projectSaving &&
+    !project.completed &&
+    project.tasks.length < MAX_PROJECT_TASKS &&
+    newTaskText.length >= 3 &&
+    !duplicateNewTask;
+
+  async function handleAddTask() {
+    if (!canAddTask) return;
+    await onAddProjectTask(project.id, newTaskText);
+    setNewTaskLabel("");
+  }
 
   return (
     <div
@@ -457,9 +499,24 @@ function ProjectCard({
             Dia {completedDays}/{targetDays} · Hoje {completedTasksToday}/{project.tasks.length}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="rounded-full bg-[#fff2b8] px-3 py-1 text-xs font-black text-[#7a6418]">
           Bônus +{project.xpReward} XP · 🪙 {projectCoinReward}
-        </span>
+          </span>
+          <button
+            className="rounded-full border border-[#ffd0d0] bg-[#fff6f6] px-3 py-1 text-[11px] font-black text-[#a04444] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={projectSaving}
+            onClick={() => {
+              const actionLabel = project.completed ? "Arquivar" : "Remover";
+              if (window.confirm(`${actionLabel} o projeto "${project.title}"?`)) {
+                void onDeleteProject(project.id);
+              }
+            }}
+            type="button"
+          >
+            {project.completed ? "Arquivar" : "Remover"}
+          </button>
+        </div>
       </div>
 
       <div className="mb-3 h-2 overflow-hidden rounded-full bg-[#edf3ff]">
@@ -507,6 +564,57 @@ function ProjectCard({
           );
         })}
       </div>
+
+      {!project.completed ? (
+        <div className="mt-3 rounded-2xl border-2 border-dashed border-[#b8cff8] bg-[#f8fbff] p-3">
+          <p className="mb-2 text-xs font-black text-[#66799e]">
+            Editar atividades ({project.tasks.length}/{MAX_PROJECT_TASKS})
+          </p>
+          <div className="mb-3 space-y-2">
+            {project.tasks.map((task) => (
+              <div
+                className="flex min-h-9 items-center gap-2 rounded-2xl bg-white px-3 text-xs font-black text-[#102b55]"
+                key={`edit-${task.id}`}
+              >
+                <span className="min-w-0 flex-1">{task.label}</span>
+                <button
+                  aria-label={`Remover ${task.label}`}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fff6f6] text-[#a04444] disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={projectSaving || project.tasks.length <= 1}
+                  onClick={() => onRemoveProjectTask(project.id, task.id)}
+                  type="button"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="h-10 min-w-0 flex-1 rounded-2xl border-2 border-[#dbe6fb] bg-white px-3 text-sm font-bold text-[#102b55] outline-none transition focus:border-[#1f5fbf]"
+              disabled={project.tasks.length >= MAX_PROJECT_TASKS}
+              maxLength={38}
+              placeholder="Nova atividade"
+              value={newTaskLabel}
+              onChange={(event) => setNewTaskLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleAddTask();
+                }
+              }}
+            />
+            <button
+              className="h-10 shrink-0 rounded-2xl bg-[#102b55] px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!canAddTask}
+              onClick={handleAddTask}
+              type="button"
+            >
+              {pendingAdd ? "..." : "+"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {project.completed ? (
         <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-black text-[#1f5fbf]">

@@ -76,11 +76,16 @@ export function TeancumApp() {
       onCompleteTask={teancum.completeTask}
       onCreateProject={teancum.createProject}
       onCreateBattle={teancum.createBattle}
+      onAddProjectTask={teancum.addProjectTask}
+      onDeleteProject={teancum.deleteProject}
       onEquipItem={teancum.equipShopItem}
       onFinishIntro={teancum.finishIntro}
       onJoinBattle={teancum.joinBattle}
       onLinkGoogleAccount={teancum.linkGoogleAccount}
       onRefreshLeaderboard={teancum.refreshLeaderboard}
+      onRemoveProjectTask={teancum.removeProjectTask}
+      onUpdateDailyGoals={teancum.updateDailyGoals}
+      onSwitchAccount={teancum.switchAccount}
       pendingProjectTaskId={teancum.pendingProjectTaskId}
       pendingShopItemId={teancum.pendingShopItemId}
       pendingTaskId={teancum.pendingTaskId}

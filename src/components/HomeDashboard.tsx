@@ -26,7 +26,7 @@ export function HomeDashboard({ profile, progress, projects }: HomeDashboardProp
   const todayKey = getTodayKey();
   const dailyTasks = getDailyTasks(profile);
   const taskProgress = progress ? normalizeTaskProgress(progress, profile) : null;
-  const activeProjects = projects.filter((project) => !project.completed);
+  const activeProjects = projects.filter((project) => !project.completed && !project.archived);
   const projectTasks = activeProjects.flatMap((project) =>
     project.tasks.map((task, taskIndex) => {
       const customTaskIndex =
