@@ -118,6 +118,10 @@ function getFirebaseConnectionMessage(error: unknown) {
     return "Conectei ao Firebase, mas o Firestore negou acesso. Publique as regras atualizadas em firestore.rules.";
   }
 
+  if (code === "unavailable") {
+    return "Não consegui alcançar o Firestore agora. Confira se o Cloud Firestore está ativo no Firebase e tente novamente em outra rede se continuar.";
+  }
+
   return code
     ? `Não consegui conectar ao Firebase agora. Código: ${code}.`
     : "Não consegui conectar ao Firebase agora.";

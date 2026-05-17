@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { initializeFirestore, type Firestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +10,8 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+let firestoreDb: Firestore | null = null;
 
 export function hasFirebaseConfig() {
   return Object.values(firebaseConfig).every(Boolean);
@@ -28,5 +30,12 @@ export function getFirebaseAuth(): Auth {
 }
 
 export function getFirebaseDb(): Firestore {
-  return getFirestore(getFirebaseApp());
+  if (!firestoreDb) {
+    firestoreDb = initializeFirestore(getFirebaseApp(), {
+      experimentalForceLongPolling: true,
+      ignoreUndefinedProperties: true,
+    });
+  }
+
+  return firestoreDb;
 }
